@@ -22,6 +22,7 @@ typedef struct {
   char *dust;
   int sampling,lte_only,init_lte,antialias,polarization,nThreads;
   char **moldatfile;
+  char **girdatfile;
 } inputPars;
 
 #endif /* INPARS_H */

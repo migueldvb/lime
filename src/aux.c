@@ -68,8 +68,10 @@ parseInput(inputPars inpar, configInfo *par, image **img, molData **m){
 
   } else {
     par->moldatfile=malloc(sizeof(char *)*par->nSpecies);
+    par->girdatfile=malloc(sizeof(char *)*par->nSpecies);
     for(id=0;id<par->nSpecies;id++){
       par->moldatfile[id] = inpar.moldatfile[id];
+      par->girdatfile[id] = inpar.girdatfile[id];
     }
 
     /* Check if files exist. */
@@ -389,6 +391,7 @@ LIME provides two different schemes of {R_1, R_2, R_3}: {PA, phi, theta} and {PA
     (*m)[i].lal = NULL;
     (*m)[i].lau = NULL;
     (*m)[i].aeinst = NULL;
+    (*m)[i].gir = NULL;
     (*m)[i].freq = NULL;
     (*m)[i].beinstu = NULL;
     (*m)[i].beinstl = NULL;

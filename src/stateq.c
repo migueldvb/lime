@@ -107,10 +107,16 @@ stateq(int id, struct grid *gp, molData *md, const int ispec\
 void
 getmatrix(int id, gsl_matrix *matrix, molData *md, struct grid *gp, int ispec, gridPointData *mp){
   int ti,k,l,li,ipart,di;
+  double *girtot;
   struct getmatrix {
     double *ctot;
     gsl_matrix * colli;
   } *partner;
+
+  girtot  = malloc(sizeof(double)*md[ispec].nlev);
+  for(k=0;k<md[ispec].nlev;k++){
+    girtot[k] = 0;
+  }
 
   partner = malloc(sizeof(struct getmatrix)*md[ispec].npart);
 
@@ -163,6 +169,11 @@ getmatrix(int id, gsl_matrix *matrix, molData *md, struct grid *gp, int ispec, g
   }
 
   for(k=0;k<md[ispec].nlev;k++){
+    for(l=0;l<md[ispec].nlev;l++)
+      girtot[k] += md[ispec].gir[k*md[ispec].nlev+l];
+  }
+
+  for(k=0;k<md[ispec].nlev;k++){
     for(ipart=0;ipart<md[ispec].npart;ipart++){
       di = md[ispec].part[ipart].densityIndex;
       if(di>=0)
@@ -176,6 +187,16 @@ getmatrix(int id, gsl_matrix *matrix, molData *md, struct grid *gp, int ispec, g
             gsl_matrix_set(matrix,k,l,gsl_matrix_get(matrix,k,l)-gp[id].dens[di]*gsl_matrix_get(partner[ipart].colli,l,k));
         }
       }
+    }
+    gsl_matrix_set(matrix, md[ispec].nlev, k, 1.);
+    gsl_matrix_set(matrix, k, md[ispec].nlev, 0.);
+  }
+
+  for(k=0;k<md[ispec].nlev;k++){
+    gsl_matrix_set(matrix,k,k,gsl_matrix_get(matrix,k,k)+girtot[k]);
+    for(l=0;l<md[ispec].nlev;l++){
+      if(k!=l)
+        gsl_matrix_set(matrix,k,l,gsl_matrix_get(matrix,k,l)-md[ispec].gir[l*md[ispec].nlev+k]);
     }
     gsl_matrix_set(matrix, md[ispec].nlev, k, 1.);
     gsl_matrix_set(matrix, k, md[ispec].nlev, 0.);

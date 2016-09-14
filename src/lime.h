@@ -114,6 +114,7 @@ typedef struct {
   int sampling,lte_only,init_lte,antialias,polarization,nThreads,numDims;
   int nLineImages, nContImages;
   char **moldatfile;
+  char **girdatfile;
 } configInfo;
 
 struct cpData {
@@ -125,7 +126,7 @@ struct cpData {
 typedef struct {
   int nlev,nline,npart;
   int *lal,*lau;
-  double *aeinst,*freq,*beinstu,*beinstl,*eterm,*gstat;
+  double *aeinst,*freq,*beinstu,*beinstl,*eterm,*gstat,*gir;
   double *cmb,amass;
   struct cpData *part;
   char molName[80];

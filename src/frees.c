@@ -63,6 +63,7 @@ freeMolData(const int nSpecies, molData *mol){
       free(mol[i].lal);
       free(mol[i].lau);
       free(mol[i].aeinst);
+      free(mol[i].gir);
       free(mol[i].freq);
       free(mol[i].beinstu);
       free(mol[i].beinstl);
