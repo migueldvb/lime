@@ -160,6 +160,11 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
       gsl_matrix_set(partner[ipart].colli, part.lcu[ti], part.lcl[ti], down);
       gsl_matrix_set(partner[ipart].colli, part.lcl[ti], part.lcu[ti], up);
     }
+    if (ipart == 1) {
+      aij = HPLANCK*freq/2./KBOLTZ/temp
+      gsl_matrix_set(partner[ipart].colli, part.lcu[ti], part.lcl[ti], down);
+      gsl_matrix_set(partner[ipart].colli, part.lcl[ti], part.lcu[ti], up);
+    }
 
     for(k=0;k<m[ispec].nlev;k++){
       partner[ipart].ctot[k]=0.;
