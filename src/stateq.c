@@ -11,6 +11,7 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_errno.h>
+#include <gsl/gsl_sf_bessel.h>
 
 
 void
@@ -103,9 +104,27 @@ stateq(int id, struct grid *g, molData *m, const int ispec, configInfo *par\
   free(oopop);
 }
 
+double
+e_temperature(double r){
+  double Te;
+  double rcs = 1.125e6; /* m scaling factors missing */
+  double Tkin = 50;
+  double Tmax = 1e4;
+  if (r < rcs) {
+    Te = Tkin;
+  }
+  else if (r > 2*rcs) {
+    Te = Tmax;
+  }
+  else {
+    Te = 40 + (Tmax - 40)*(r/rcs-1);
+  }
+  return Te;
+}
+
 void
 getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gridPointData *mp){
-  int ti,k,l,li,ipart,di;
+  int ti,k,l,li,ipart,di,iline;
   struct getmatrix {
     double *ctot;
     gsl_matrix * colli;
@@ -149,6 +168,7 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
     gsl_matrix_set(matrix, l, k, gsl_matrix_get(matrix, l, k)-m[ispec].beinstu[li]*mp[ispec].jbar[li]-m[ispec].aeinst[li]);
   }
 
+  double distance = sqrt(g[id].x[0]* g[id].x[0]+g[id].x[1]*g[id].x[1]+g[id].x[2]*g[id].x[2]);
   /* Populate matrix with collisional transitions */
   for(ipart=0;ipart<m[ispec].npart;ipart++){
     struct cpData part = m[ispec].part[ipart];
@@ -160,10 +180,20 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
       gsl_matrix_set(partner[ipart].colli, part.lcu[ti], part.lcl[ti], down);
       gsl_matrix_set(partner[ipart].colli, part.lcl[ti], part.lcu[ti], up);
     }
+
+    /* collisions with electrons */
     if (ipart == 1) {
-      aij = HPLANCK*freq/2./KBOLTZ/temp
-      gsl_matrix_set(partner[ipart].colli, part.lcu[ti], part.lcl[ti], down);
-      gsl_matrix_set(partner[ipart].colli, part.lcl[ti], part.lcu[ti], up);
+      for(iline=0;iline<m[0].nline;iline++){
+        double aij = HPLANCK*m[0].freq[iline]/2./KBOLTZ/e_temperature(distance);
+	double sigmaij = 9.10938356e-31*pow(1.6021766208e-19,2)*pow(299792458.0,3)*m[0].aeinst[iline]/16/pow(PI,2)/8.854187817620389e-12/pow(HPLANCK,2)/pow(m[0].freq[iline],4);
+        double ve = sqrt(8*KBOLTZ*e_temperature(distance)/PI/9.10938356e-31);
+	double bessel = gsl_sf_bessel_K0(aij);
+        double ceij = ve*sigmaij*2.*aij*exp(aij)*bessel;
+        double gij = m[0].gstat[m[0].lau[iline]]/m[0].gstat[m[0].lal[iline]];
+        double ceji = ve*gij*sigmaij*2.*aij*exp(-aij)*bessel;
+        gsl_matrix_set(partner[ipart].colli, m[0].lau[iline], m[0].lal[iline], ceij);
+        gsl_matrix_set(partner[ipart].colli, m[0].lal[iline], m[0].lau[iline], ceji);
+      }
     }
 
     for(k=0;k<m[ispec].nlev;k++){
