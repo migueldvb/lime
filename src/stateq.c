@@ -125,20 +125,30 @@ e_temperature(double r){
 void
 getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gridPointData *mp){
   int ti,k,l,li,ipart,di,iline;
+  double *gir;
+  double *girtot;
   struct getmatrix {
     double *ctot;
     gsl_matrix * colli;
   } *partner;
   /* IR pumping for ortho-water */
-  double gir[7][7] = {
-  {0., 1.654e-5, 2.464e-5, 8.486e-5, 1.471e-4, 1.359e-5, 2.905e-5},
-  {1.423e-5, 0., 1.882e-4, 1.696e-5, 1.118e-5, 9.143e-5, 1.294e-5},
-  {1.323e-5, 1.154e-4, 0., 1.315e-5, 1.492e-5, 1.341e-4, 1.421e-5},
-  {5.619e-5, 1.602e-5, 1.531e-5, 0., 2.846e-5, 1.694e-5, 1.415e-4},
-  {6.620e-5, 5.189e-6, 1.113e-5, 1.982e-5, 0., 1.013e-5, 5.302e-5},
-  {4.428e-6, 4.090e-5, 1.006e-4, 5.843e-6, 7.287e-6, 0., 9.177e-6},
-  {1.448e-5, 7.867e-6, 9.250e-6, 1.038e-4, 5.593e-5, 1.166e-5, 0.}};
-  double girtot[7] = {0};
+  /* double gir[7][7] = { */
+  /* {0., 1.654e-5, 2.464e-5, 8.486e-5, 1.471e-4, 1.359e-5, 2.905e-5}, */
+  /* {1.423e-5, 0., 1.882e-4, 1.696e-5, 1.118e-5, 9.143e-5, 1.294e-5}, */
+  /* {1.323e-5, 1.154e-4, 0., 1.315e-5, 1.492e-5, 1.341e-4, 1.421e-5}, */
+  /* {5.619e-5, 1.602e-5, 1.531e-5, 0., 2.846e-5, 1.694e-5, 1.415e-4}, */
+  /* {6.620e-5, 5.189e-6, 1.113e-5, 1.982e-5, 0., 1.013e-5, 5.302e-5}, */
+  /* {4.428e-6, 4.090e-5, 1.006e-4, 5.843e-6, 7.287e-6, 0., 9.177e-6}, */
+  /* {1.448e-5, 7.867e-6, 9.250e-6, 1.038e-4, 5.593e-5, 1.166e-5, 0.}}; */
+  /* double girtot[7] = {0}; */
+  gir  = malloc(sizeof(double)*2*m[ispec].nlev);
+  girtot  = malloc(sizeof(double)*m[ispec].nlev);
+  for(k=0;k<m[ispec].nlev;k++){
+    girtot[k] = 0;
+    for(l=0;l<m[ispec].nlev;l++){
+      gir[k][l] = 0.;
+    }
+  }
 
   partner = malloc(sizeof(struct getmatrix)*m[ispec].npart);
 
@@ -202,8 +212,8 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
         partner[ipart].ctot[k] += gsl_matrix_get(partner[ipart].colli,k,l);
     }
   }
-  for(k=0;k<7;k++){
-    for(l=0;l<7;l++)
+  for(k=0;k<m[ispec].nlev;k++){
+    for(l=0;l<m[ispec].nlev;l++)
       girtot[k] += gir[k][l];
   }
 
