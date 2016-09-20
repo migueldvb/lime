@@ -125,7 +125,6 @@ e_temperature(double r){
 void
 getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gridPointData *mp){
   int ti,k,l,li,ipart,di,iline;
-  double *gir;
   double *girtot;
   struct getmatrix {
     double *ctot;
@@ -141,13 +140,11 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
   /* {4.428e-6, 4.090e-5, 1.006e-4, 5.843e-6, 7.287e-6, 0., 9.177e-6}, */
   /* {1.448e-5, 7.867e-6, 9.250e-6, 1.038e-4, 5.593e-5, 1.166e-5, 0.}}; */
   /* double girtot[7] = {0}; */
-  gir  = malloc(sizeof(double)*2*m[ispec].nlev);
+  double gir[256][256]  = {0};
+
   girtot  = malloc(sizeof(double)*m[ispec].nlev);
   for(k=0;k<m[ispec].nlev;k++){
     girtot[k] = 0;
-    for(l=0;l<m[ispec].nlev;l++){
-      gir[k][l] = 0.;
-    }
   }
 
   partner = malloc(sizeof(struct getmatrix)*m[ispec].npart);
@@ -195,9 +192,9 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
     if (ipart == 1) {
       for(iline=0;iline<m[0].nline;iline++){
         double aij = HPLANCK*m[0].freq[iline]/2./KBOLTZ/e_temperature(distance);
-	double sigmaij = 9.10938356e-31*pow(1.6021766208e-19,2)*pow(299792458.0,3)*m[0].aeinst[iline]/16/pow(PI,2)/8.854187817620389e-12/pow(HPLANCK,2)/pow(m[0].freq[iline],4);
+       double sigmaij = 9.10938356e-31*pow(1.6021766208e-19,2)*pow(299792458.0,3)*m[0].aeinst[iline]/16/pow(PI,2)/8.854187817620389e-12/pow(HPLANCK,2)/pow(m[0].freq[iline],4);
         double ve = sqrt(8*KBOLTZ*e_temperature(distance)/PI/9.10938356e-31);
-	double bessel = gsl_sf_bessel_K0(aij);
+       double bessel = gsl_sf_bessel_K0(aij);
         double ceij = ve*sigmaij*2.*aij*exp(aij)*bessel;
         double gij = m[0].gstat[m[0].lau[iline]]/m[0].gstat[m[0].lal[iline]];
         double ceji = ve*gij*sigmaij*2.*aij*exp(-aij)*bessel;
@@ -212,6 +209,8 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
         partner[ipart].ctot[k] += gsl_matrix_get(partner[ipart].colli,k,l);
     }
   }
+
+
   for(k=0;k<m[ispec].nlev;k++){
     for(l=0;l<m[ispec].nlev;l++)
       girtot[k] += gir[k][l];
