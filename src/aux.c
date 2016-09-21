@@ -38,6 +38,7 @@ parseInput(inputPars inpar, configInfo *par, image **img, molData **m){
   par->binoutputfile= inpar.binoutputfile;
   par->restart      = inpar.restart;
   par->gridfile     = inpar.gridfile;
+  par->gijfile      = inpar.gijfile;
   par->pregrid      = inpar.pregrid;
   par->lte_only     = inpar.lte_only;
   par->init_lte     = inpar.init_lte;

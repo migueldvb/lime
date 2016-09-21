@@ -16,6 +16,7 @@ typedef struct {
   int sinkPoints,pIntensity,blend,*collPartIds,traceRayAlgorithm;
   char *outputfile,*binoutputfile;
 //  char *inputfile; unused at present.
+  char *gijfile;
   char *gridfile;
   char *pregrid;
   char *restart;

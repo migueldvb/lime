@@ -51,6 +51,7 @@ initParImg(inputPars *par, image **img)
   par->outputfile   = NULL;
   par->binoutputfile= NULL;
   par->gridfile     = NULL;
+  par->gijfile      = NULL;
   par->pregrid      = NULL;
   par->restart      = NULL;
 
