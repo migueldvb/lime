@@ -373,6 +373,7 @@ LIME provides two different schemes of {R_1, R_2, R_3}: {PA, phi, theta} and {PA
     (*m)[i].lal = NULL;
     (*m)[i].lau = NULL;
     (*m)[i].aeinst = NULL;
+    (*m)[i].gij = NULL;
     (*m)[i].freq = NULL;
     (*m)[i].beinstu = NULL;
     (*m)[i].beinstl = NULL;

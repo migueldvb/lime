@@ -95,6 +95,7 @@ void readMolData(configInfo *par, molData *md, int **allUniqueCollPartIds, int *
     md[i].lal     = malloc(sizeof(int)   *md[i].nline);
     md[i].lau     = malloc(sizeof(int)   *md[i].nline);
     md[i].aeinst  = malloc(sizeof(double)*md[i].nline);
+    md[i].gij     = malloc(sizeof(double)*md[i].nlev*md[i].nlev);
     md[i].freq    = malloc(sizeof(double)*md[i].nline);
     md[i].beinstu = malloc(sizeof(double)*md[i].nline);
     md[i].beinstl = malloc(sizeof(double)*md[i].nline);
@@ -242,6 +243,23 @@ void readMolData(configInfo *par, molData *md, int **allUniqueCollPartIds, int *
     }
 
     fclose(fp);
+
+    int ii, jj;
+    double gg;
+    if((fp=fopen(par->gijfile, "r"))==NULL){
+      if(!silent) bail_out("Error opening Gij data file");
+      exit(1);
+    }
+    for(ii=0;ii<md[i].nlev;ii++){
+      for(jj=0;jj<md[i].nlev;jj++){
+        md[i].gij[ii*md[i].nlev+jj] = 0.;
+      }
+    }
+    while (fscanf(fp, "%d %d %g", &ii, &jj, &gg) != EOF) {
+      md[i].gij[ii*md[i].nlev+jj] = gg;
+    }
+    fclose(fp);
+
   } /* end loop over molecule index i */
 
   if((*numCollPartsFound)<=0){

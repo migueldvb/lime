@@ -140,18 +140,6 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
   /* {4.428e-6, 4.090e-5, 1.006e-4, 5.843e-6, 7.287e-6, 0., 9.177e-6}, */
   /* {1.448e-5, 7.867e-6, 9.250e-6, 1.038e-4, 5.593e-5, 1.166e-5, 0.}}; */
   /* double girtot[7] = {0}; */
-  double gir[256][256]  = {0};
-  FILE *fp;
-  int i, j;
-  double gij;
-  if((fp=fopen(par->gijfile, "r"))==NULL) {
-    if(!silent) bail_out("Error opening Gij data file");
-    exit(1);
-  }
-  while (fscanf(fp, "%d %d %g", &i, &j, &gij) != EOF) {
-    gir[i][j] = gij;
-  }
-
   girtot  = malloc(sizeof(double)*m[ispec].nlev);
   for(k=0;k<m[ispec].nlev;k++){
     girtot[k] = 0;
@@ -223,7 +211,7 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
 
   for(k=0;k<m[ispec].nlev;k++){
     for(l=0;l<m[ispec].nlev;l++)
-      girtot[k] += gir[k][l];
+      girtot[k] += m[ispec].gij[k*m[ispec].nlev+l];
   }
 
   for(k=0;k<m[ispec].nlev;k++){
@@ -249,7 +237,7 @@ getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gri
     gsl_matrix_set(matrix,k,k,gsl_matrix_get(matrix,k,k)+girtot[k]);
     for(l=0;l<7;l++){
       if(k!=l)
-        gsl_matrix_set(matrix,k,l,gsl_matrix_get(matrix,k,l)-gir[l][k]);
+        gsl_matrix_set(matrix,k,l,gsl_matrix_get(matrix,k,l)-m[ispec].gij[l*m[ispec].nlev+k]);
     }
     gsl_matrix_set(matrix, m[ispec].nlev, k, 1.);
     gsl_matrix_set(matrix, k, m[ispec].nlev, 0.);

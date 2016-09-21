@@ -133,7 +133,7 @@ struct cpData {
 typedef struct {
   int nlev,nline,npart;
   int *lal,*lau;
-  double *aeinst,*freq,*beinstu,*beinstl,*eterm,*gstat;
+  double *aeinst,*freq,*beinstu,*beinstl,*eterm,*gstat,*gij;
   double norm,norminv,*cmb,*local_cmb,amass;
   struct cpData *part;
 } molData;
