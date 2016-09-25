@@ -46,7 +46,7 @@ stateq(int id, struct grid *g, molData *m, const int ispec, configInfo *par\
   while((diff>TOL && iter<MAXITER) || iter<5){
     getjbar(id,m,g,ispec,par,blends,nextMolWithBlend,mp,halfFirstDs);
 
-    getmatrix(id,matrix,m,g,ispec,mp,par);
+    getmatrix(id,matrix,m,g,ispec,mp);
     for(s=0;s<m[ispec].nlev;s++){
       for(t=0;t<m[ispec].nlev-1;t++){
         gsl_matrix_set(reduc,t,s,gsl_matrix_get(matrix,t,s));
@@ -123,7 +123,7 @@ e_temperature(double r){
 }
 
 void
-getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gridPointData *mp, configInfo *par){
+getmatrix(int id, gsl_matrix *matrix, molData *m, struct grid *g, int ispec, gridPointData *mp){
   int ti,k,l,li,ipart,di,iline;
   double *girtot;
   struct getmatrix {

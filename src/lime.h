@@ -336,7 +336,7 @@ void	getArea(configInfo *, struct grid *, const gsl_rng *);
 void	getclosest(double, double, double, long *, long *, double *, double *, double *);
 void	getjbar(int, molData*, struct grid*, const int, configInfo*, struct blendInfo, int, gridPointData*, double*);
 void	getMass(configInfo *, struct grid *, const gsl_rng *);
-void	getmatrix(int, gsl_matrix *, molData *, struct grid *, int, gridPointData *, configInfo *);
+void	getmatrix(int, gsl_matrix *, molData *, struct grid *, int, gridPointData *);
 int	getNewEntryFaceI(const unsigned long, const struct cell);
 int	getNextEdge(double*, int, struct grid*, const gsl_rng*);
 void	getVelosplines(configInfo *, struct grid *);
