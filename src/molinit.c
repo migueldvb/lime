@@ -256,7 +256,7 @@ void readMolData(configInfo *par, molData *md, int **allUniqueCollPartIds, int *
       }
     }
     while (fscanf(fp, "%d %d %g", &ii, &jj, &gg) != EOF) {
-      md[i].gij[ii*md[i].nlev+jj] = gg;
+      md[i].gij[(ii-1)*md[i].nlev+jj-1] = gg;
     }
     fclose(fp);
 
