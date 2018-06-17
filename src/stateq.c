@@ -11,6 +11,7 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_errno.h>
+#include <gsl/gsl_sf_bessel.h>
 
 
 /*....................................................................*/
@@ -81,13 +82,32 @@ getFixedMatrix(molData *md, int ispec, struct grid *gp, int id, gsl_matrix *coll
 }
 
 /*....................................................................*/
+double
+e_temperature(double r){
+  double Te;
+  double rcs = 1.125e6; /* m scaling factors missing */
+  double Tkin = 50;
+  double Tmax = 1e4;
+  if (r < rcs) {
+    Te = Tkin;
+  }
+  else if (r > 2*rcs) {
+    Te = Tmax;
+  }
+  else {
+    Te = 40 + (Tmax - 40)*(r/rcs-1);
+  }
+  return Te;
+}
+
 void
 getMatrix(gsl_matrix *matrix, molData *md, int ispec, gridPointData *mp, gsl_matrix *colli){
-  int k,l,li;
+  int k,l,li,iline;
 
   /* Initialize matrix by copying the fixed part */
   gsl_matrix_memcpy(matrix, colli);
 
+  double distance = sqrt(gp[id].x[0]* gp[id].x[0]+gp[id].x[1]*gp[id].x[1]+gp[id].x[2]*gp[id].x[2]);
   /* Populate matrix with radiative transitions */
   for(li=0;li<md[ispec].nline;li++){
     k=md[ispec].lau[li];
@@ -96,6 +116,21 @@ getMatrix(gsl_matrix *matrix, molData *md, int ispec, gridPointData *mp, gsl_mat
     gsl_matrix_set(matrix, l, l, gsl_matrix_get(matrix, l, l)+md[ispec].beinstl[li]*mp[ispec].jbar[li]);
     gsl_matrix_set(matrix, k, l, gsl_matrix_get(matrix, k, l)-md[ispec].beinstl[li]*mp[ispec].jbar[li]);
     gsl_matrix_set(matrix, l, k, gsl_matrix_get(matrix, l, k)-md[ispec].beinstu[li]*mp[ispec].jbar[li]-md[ispec].aeinst[li]);
+
+    /* collisions with electrons */
+    if (ipart == 1) {
+      for(iline=0;iline<md[0].nline;iline++){
+        double aij = HPLANCK*md[0].freq[iline]/2./KBOLTZ/e_temperature(distance);
+	double sigmaij = 9.10938356e-31*pow(1.6021766208e-19,2)*pow(299792458.0,3)*md[0].aeinst[iline]/16/pow(PI,2)/8.854187817620389e-12/pow(HPLANCK,2)/pow(md[0].freq[iline],4);
+        double ve = sqrt(8*KBOLTZ*e_temperature(distance)/PI/9.10938356e-31);
+	double bessel = gsl_sf_bessel_K0(aij);
+        double ceij = ve*sigmaij*2.*aij*exp(aij)*bessel;
+        double gij = md[0].gstat[md[0].lau[iline]]/md[0].gstat[md[0].lal[iline]];
+        double ceji = ve*gij*sigmaij*2.*aij*exp(-aij)*bessel;
+        gsl_matrix_set(partner[ipart].colli, md[0].lau[iline], md[0].lal[iline], ceij);
+        gsl_matrix_set(partner[ipart].colli, md[0].lal[iline], md[0].lau[iline], ceji);
+      }
+    }
   }
 }
 
