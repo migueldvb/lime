@@ -24,6 +24,57 @@ struct baryVelBuffType {
   double **vertexVels,**edgeVels,*entryCellBary,*midCellBary,*exitCellBary,*shapeFns;
 };
 
+typedef struct{
+  double x[DIM], xCmpntRay, B[3];
+  struct populations *mol;
+  struct continuumLine cont;
+} gridInterp;
+
+/*....................................................................*/
+void calcGridContDustOpacity(configInfo *par, const double freq\
+  , double *lamtab, double *kaptab, const int nEntries, struct grid *gp){
+
+  int id;
+  double gtd;
+  gsl_spline *spline = NULL;
+  gsl_interp_accel *acc = NULL;
+  double *kappatab = NULL;
+  double *knus=NULL, *dusts=NULL;
+  double *freqs=NULL;
+
+  kappatab = malloc(sizeof(*kappatab)*1);
+  knus     = malloc(sizeof(*knus)    *1);
+  dusts    = malloc(sizeof(*dusts)   *1);
+  freqs    = malloc(sizeof(*freqs)   *1);
+
+  freqs[0] = freq;
+
+  if(par->dust == NULL)
+    kappatab[0] = 0.;
+  else{
+    acc = gsl_interp_accel_alloc();
+    spline = gsl_spline_alloc(gsl_interp_cspline,nEntries);
+    gsl_spline_init(spline,lamtab,kaptab,nEntries);
+    kappatab[0] = interpolateKappa(freq, lamtab, kaptab, nEntries, spline, acc);
+  }
+
+  for(id=0;id<par->ncell;id++){
+    gasIIdust(gp[id].x[0],gp[id].x[1],gp[id].x[2],&gtd);
+    calcDustData(par, gp[id].dens, freqs, gtd, kappatab, 1, gp[id].t, knus, dusts); /* in aux.c. */
+    gp[id].cont.knu = knus[0];
+    gp[id].cont.dust = dusts[0];
+  }
+
+  if(par->dust != NULL){
+    gsl_spline_free(spline);
+    gsl_interp_accel_free(acc);
+  }
+  free(knus);
+  free(dusts);
+  free(freqs);
+  free(kappatab);
+}
+
 /*....................................................................*/
 void
 calcLineAmpSample(const double x[3], const double dx[3], const double ds\
@@ -31,6 +82,8 @@ calcLineAmpSample(const double x[3], const double dx[3], const double ds\
   , const double oneOnNSteps, const double deltav, double *vfac){
   /*
 The bulk velocity of the model material can vary significantly with position, thus so can the value of the line-shape function at a given frequency and direction. The present function calculates 'vfac', an approximate average of the line-shape function along a path of length ds in the direction of the line of sight.
+
+Note that this is called from within the multi-threaded block.
   */
   int i;
   double v,val;
@@ -57,6 +110,8 @@ calcLineAmpInterp(const double projVelRay, const double binv\
   , const double deltav, double *vfac){
   /*
 The bulk velocity of the model material can vary significantly with position, thus so can the value of the line-shape function at a given frequency and direction. The present function calculates 'vfac', an approximate average of the line-shape function along a path of length ds in the direction of the line of sight.
+
+Note that this is called from within the multi-threaded block.
   */
   double v,val;
 
@@ -78,6 +133,8 @@ calcLineAmpErf(const double projVelOld, const double projVelNew, const double bi
   , const double deltav, const double segmentLen, double *vfac){
   /*
 The bulk velocity of the model material can vary significantly with position, thus so can the value of the line-shape function at a given frequency and direction. The present function calculates 'vfac', an approximate average of the line-shape function along a path of length ds in the direction of the line of sight.
+
+Note that this is called from within the multi-threaded block.
   */
   double vbOld,vbNew;
 
@@ -96,6 +153,8 @@ line_plane_intersect(struct grid *gp, double *ds, int posn, int *nposn\
   , double *dx, double *x, double cutoff){
   /*
 This function returns ds as the (always positive-valued) distance between the present value of x and the next Voronoi face in the direction of vector dx, and nposn as the id of the grid cell that abuts that face. 
+
+Note that this is called from within the multi-threaded block.
   */
   double newdist, numerator, denominator ;
   int i;
@@ -129,7 +188,14 @@ traceray(rayData ray, const int im\
   /*
 For a given image pixel position, this function evaluates the intensity of the total light emitted/absorbed along that line of sight through the (possibly rotated) model. The calculation is performed for several frequencies, one per channel of the output image.
 
-Note that the algorithm employed here is similar to that employed in the function photon() which calculates the average radiant flux impinging on a grid cell: namely the notional photon is started at the side of the model near the observer and 'propagated' in the receding direction until it 'reaches' the far side. This is rather non-physical in conception but it makes the calculation easier.
+Note that the algorithm employed here is similar to that employed in the function calculateJBar() which calculates the average radiant flux impinging on a grid cell: namely the notional photon is started at the side of the model near the observer and 'propagated' in the receding direction until it 'reaches' the far side. This is rather non-physical in conception but it makes the calculation easier.
+
+Note that this is called from within the multi-threaded block.
+
+Reads gp attributes x, dir, numNeigh, neigh, cont
+if(par->polarization): B
+if(img[im].doline): mol[molI].binv, mol[molI].specNumDens
+if(!if(par->useVelFuncInRaytrace)): vel
   */
   int ichan,stokesId,di,i,posn,nposn,molI,lineI;
   double xp,yp,zp,x[DIM],dx[DIM],dist2,ndist2,col,ds,snu_pol[3],dtau;
@@ -172,10 +238,9 @@ Note that the algorithm employed here is similar to that employed in the functio
 
   col=0;
   do{
-
     ds=-2.*zp-col; /* This default value is chosen to be as large as possible given the spherical model boundary. */
     nposn=-1;
-    line_plane_intersect(gp,&ds,posn,&nposn,dx,x,cutoff); /* Returns a new ds equal to the distance to the next Voronoi face, and nposn, the ID of the grid cell that abuts that face. */
+    line_plane_intersect(gp,&ds,posn,&nposn,dx,x,cutoff); /* Reads gp attributes numNeigh, x, dir, neigh. Returns a new ds equal to the distance to the next Voronoi face, and nposn, the ID of the grid cell that abuts that face. */
 
     if(par->polarization){ /* Should also imply img[im].doline==0. */
       sourceFunc_pol(gp[posn].B, gp[posn].cont, img[im].rotMat, snu_pol, &alpha);
@@ -242,7 +307,9 @@ Note that the algorithm employed here is similar to that employed in the functio
         } /* end if(img[im].doline) */
 
         dtau=alpha*ds;
-//???          if(dtau < -30) dtau = -30; // as in photon()?
+        /* Should we check for overly strong masers as in calculateJBar()?
+        if(dtau < -30) dtau = -30;  
+        */
         calcSourceFn(dtau, par, &remnantSnu, &expDTau);
         remnantSnu *= jnu*ds;
 #ifdef FASTEXP
@@ -280,6 +347,8 @@ For a linear interpolation, each shape function Q_i(r_) is in fact just equal to
 In the present case, N==3, the simplex is a triangular face of a Delaunay cell, and the point at which we desire the interpolated value is the intersection of a ray with that face. Several grid quantities of interest are interpolated.
 
 For a readable definition of barycentric coordinates, see the wikipedia article of that name.
+
+Note that this is called from within the multi-threaded block.
   */
 
   int di,molI,levelI;
@@ -326,6 +395,9 @@ For a readable definition of barycentric coordinates, see the wikipedia article 
 void
 doSegmentInterp(gridInterp gips[3], const int iA, molData *md\
   , const int numMols, const double oneOnNumSegments, const int si){
+  /*
+Note that this is called from within the multi-threaded block.
+  */
 
   const double fracA = (si + 0.5)*oneOnNumSegments, fracB = 1.0 - fracA;
   const int iB = 1 - iA;
@@ -356,6 +428,9 @@ doSegmentInterp(gridInterp gips[3], const int iA, molData *md\
 /*....................................................................*/
 void
 calc2ndOrderShapeFunctions(struct baryVelBuffType *ptrToBuff, const int rayNum){
+  /*
+Note that this is called from within the multi-threaded block.
+  */
   int vi,ei;
   char message[STR_LEN_0];
   double *barys=NULL;
@@ -380,6 +455,7 @@ calc2ndOrderShapeFunctions(struct baryVelBuffType *ptrToBuff, const int rayNum){
   for(ei=0;ei<(*ptrToBuff).numEdges;ei++){
     (*ptrToBuff).shapeFns[vi] = 4.0*barys[(*ptrToBuff).edgeVertexIndices[ei][0]]\
                                    *barys[(*ptrToBuff).edgeVertexIndices[ei][1]];
+
     vi++;
   }
 }
@@ -388,6 +464,9 @@ calc2ndOrderShapeFunctions(struct baryVelBuffType *ptrToBuff, const int rayNum){
 void
 doBaryInterpVel(const int numDims, struct baryVelBuffType *ptrToBuff\
 , double vels[numDims]){
+  /*
+Note that this is called from within the multi-threaded block.
+  */
   int di,vi,ei;
 
   for(di=0;di<numDims;di++)
@@ -424,6 +503,8 @@ The interpolated value at r_ is, as before, the sum of the values at the vertice
 In the present case, N==4, so there are 6 half-edge points.
 
 The remaining difference between the present function and doBaryInterp() is that here we only interpolate velocity.
+
+Note that this is called from within the multi-threaded block.
   */
 
   int i;
@@ -452,6 +533,8 @@ Given y0, y1 and y2 at x0, x1 and x2, the Lagrange interpolating polynomial is
 If we calculate x as a fractional value along the line segment then, for the y values we have in hand, this reduces to
 
 	y ~ y0*(x-1)*(2x-1) + y1*x*(2x-1) + y2*4x*(1-x).
+
+***** Appears to be unused.
   */
 
   double shapeFns[3];
@@ -479,6 +562,8 @@ Given y0, y1 and y2 at x0, x1 and x2, the Lagrange interpolating polynomial is
 If x is the fractional distance along the line segment, then for the y values we have in hand, this reduces to
 
 	y ~ y0*(x-1)*(2x-1) + y1*x*(2x-1) + y2*4x*(1-x).
+
+Note that this is called from within the multi-threaded block.
   */
 
   double shapeFns[3],y;
@@ -502,19 +587,21 @@ traceray_smooth(rayData ray, const int im\
   /*
 For a given image pixel position, this function evaluates the intensity of the total light emitted/absorbed along that line of sight through the (possibly rotated) model. The calculation is performed for several frequencies, one per channel of the output image.
 
-Note that the algorithm employed here to solve the RTE is similar to that employed in the function photon() which calculates the average radiant flux impinging on a grid cell: namely the notional photon is started at the side of the model near the observer and 'propagated' in the receding direction until it 'reaches' the far side. This is rather non-physical in conception but it makes the calculation easier.
+Note that the algorithm employed here to solve the RTE is similar to that employed in the function calculateJBar() which calculates the average radiant flux impinging on a grid cell: namely the notional photon is started at the side of the model near the observer and 'propagated' in the receding direction until it 'reaches' the far side. This is rather non-physical in conception but it makes the calculation easier.
 
 This version of traceray implements a new algorithm in which the population values are interpolated linearly from those at the vertices of the Delaunay cell which the working point falls within.
 
 A note about the object 'gips': this is an array with 3 elements, each one a struct of type 'gridInterp'. This struct is meant to store as many of the grid-point quantities (interpolated from the appropriate values at actual grid locations) as are necessary for solving the radiative transfer equations along the ray path. The first 2 entries give the values for the entry and exit points to a Delaunay cell, but which is which can change, and is indicated via the variables entryI and exitI (this is a convenience to avoid copying the values, since the values for the exit point of one cell are obviously just those for entry point of the next). The third entry stores values interpolated along the ray path within a cell.
+
+Note that this is called from within the multi-threaded block.
   */
   const int numFaces = DIM+1,nVertPerFace=3,numRayInterpSamp=3;
   int ichan,stokesId,di,status,lenChainPtrs=0,entryI,exitI,vi,vvi,ci,ei,fi;
   int si,molI,lineI,k,i;
-  double xp,yp,zp,x[DIM],dir[DIM],projVelRay,vel[DIM],projVelOffset,projVel2ndDeriv;
+  double xp,yp,zp,x[DIM],dir[DIM],projVelRay=0.0,vel[DIM],projVelOffset=0.0,projVel2ndDeriv;
   double xCmpntsRay[nVertPerFace],ds,snu_pol[3],dtau,contJnu,contAlpha;
   double jnu,alpha,lineRedShift,vThisChan,deltav,vfac,remnantSnu,expDTau;
-  double brightnessIncrement,projVelOld,projVelNew;
+  double brightnessIncrement,projVelOld=0.0,projVelNew=0.0;
   intersectType entryIntcptFirstCell, *cellExitIntcpts=NULL;
   unsigned long *chainOfCellIds=NULL,dci,dci0,dci1;
   unsigned long gis[2][nVertPerFace],gi,gi0,gi1,trialGi;
@@ -822,7 +909,7 @@ At the moment I will fix the number of segments, but it might possibly be faster
           } /* end if doLine. */
 
           dtau = alpha*ds;
-//???          if(dtau < -30) dtau = -30; // as in photon()?
+//???          if(dtau < -30) dtau = -30; // as in calculateJBar()?
           calcSourceFn(dtau, par, &remnantSnu, &expDTau);
           remnantSnu *= jnu*ds;
 #ifdef FASTEXP
@@ -1118,24 +1205,27 @@ This function constructs an image cube by following sets of rays (at least 1 per
 
 Note that the argument 'md', and the grid element '.mol', are only accessed for line images.
   */
-  const int maxNumRaysPerPixel=20; /**** Arbitrary - could make this a global, or an argument. Set it to zero to indicate there is no maximum. */
+  const int maxNumRaysPerPixel=0; /**** Arbitrary - could make this a global, or an argument. Set it to zero to indicate there is no maximum. */
   const double cutoff = par->minScale*1.0e-7;
   const int numFaces=1+DIM,numInterpPoints=3,numSegments=5,minNumRaysForAverage=2;
   const double oneOnNFaces=1.0/(double)numFaces, oneOnNumSegments = 1.0/(double)numSegments;
   const double epsilon = 1.0e-6; // Needs thinking about. Double precision is much smaller than this.
   const int nStepsThruCell=10;
   const double oneOnNSteps=1.0/(double)nStepsThruCell;
+  const int nsupsamppix = 3; // Number of pixels (in x,y) from origin in which to do cartesian supersampling
+  const int supsamp = 15; // Number of rays per pixel (in x,y) for central pixel super-sampling
+
 
   double pixelSize,oneOnNumActiveRaysMinus1,imgCentreXPixels,imgCentreYPixels,minfreq,absDeltaFreq,x,xs[2],sum,oneOnNumRays;
   unsigned int totalNumImagePixels,ppi,numPixelsForInterp;
   int ichan,numCircleRays,numActiveRaysInternal,numActiveRays,lastChan;
-  int gi,molI,lineI,i,di,xi,yi,ri,vi,ei,i0,i1;
+  int gi,molI,lineI,i,di,xi,yi,ri,vi,ei,i0,i1,j;
   int cmbMolI,cmbLineI;
   rayData *rays;
   struct cell *dc=NULL;
   struct simplex *cells=NULL;
   unsigned long numCells,dci,numPointsInAnnulus;
-  double local_cmb,cmbFreq,circleSpacing,scale,angle,rSqu;
+  double local_cmb,cmbFreq,circleSpacing,scale,angle,rSqu,progFraction;
   double *vertexCoords=NULL;
   gsl_error_handler_t *defaultErrorHandler=NULL;
   struct baryVelBuffType velBuff,*ptrToBuff=NULL;
@@ -1197,8 +1287,8 @@ At the present point in the code, for line images, instead of calculating the 'c
     cmbFreq = img[im].freq;
   }
 
-  local_cmb = planckfunc(cmbFreq,2.728);
-  calcGridContDustOpacity(par, cmbFreq, lamtab, kaptab, nEntries, gp);
+  local_cmb = planckfunc(cmbFreq,LOCAL_CMB_TEMP);
+  calcGridContDustOpacity(par, cmbFreq, lamtab, kaptab, nEntries, gp); /* Reads gp attributes x, dens, and t and writes attributes cont.dust and cont.knu. */
 
   for(ppi=0;ppi<totalNumImagePixels;ppi++){
     for(ichan=0;ichan<img[im].nchan;ichan++){
@@ -1222,15 +1312,15 @@ How to calculate this distance? Well if we have N points randomly but evenly dis
     if(rSqu > (4.0/9.0)*par->radiusSqu) numPointsInAnnulus += 1;
   }
   if(numPointsInAnnulus>0){
-    circleSpacing = (1.0/6.0)*par->radius*sqrt(5.0*PI/(double)numPointsInAnnulus);
-    numCircleRays = (int)(2.0*PI*par->radius/circleSpacing);
+    circleSpacing = (1.0/6.0)*par->radius*sqrt(5.0*M_PI/(double)numPointsInAnnulus);
+    numCircleRays = (int)(2.0*M_PI*par->radius/circleSpacing);
   }else{
     numCircleRays = 0;
   }
 
   /* The following is the first of the 3 main loops in raytrace. Here we loop over the (internal or non-sink) grid points. We're doing 2 things: loading the rotated, projected coordinates into the rays list, and counting the rays per image pixel.
   */
-  rays = malloc(sizeof(rayData)*(par->pIntensity+numCircleRays)); /* We may need to reallocate this later. */
+  rays = malloc(sizeof(rayData)*(par->pIntensity+numCircleRays+pow((2*nsupsamppix*supsamp)-1,2))); /* We may need to reallocate this later. */
   numActiveRaysInternal = 0;
   for(gi=0;gi<par->pIntensity;gi++){
     /* Apply the inverse (i.e. transpose) rotation matrix. (We use the inverse matrix here because here we want to rotate grid coordinates to the observer frame, whereas inside traceray() we rotate observer coordinates to the grid frame.)
@@ -1241,15 +1331,25 @@ How to calculate this distance? Well if we have N points randomly but evenly dis
         xs[i] += gp[gi].x[di]*img[im].rotMat[di][i];
       }
     }
-
+    if(abs(xs[0])>pixelSize*nsupsamppix && abs(xs[1])>pixelSize*nsupsamppix)
     assignRayOnImage(xs, pixelSize, imgCentreXPixels, imgCentreYPixels, img, im, maxNumRaysPerPixel, rays, &numActiveRaysInternal);
-  } /* End loop 1, over grid points. */
+} /* End loop 1, over grid points. */
+
+ /* Add extra rays for the central pixels */
+  scale = pixelSize/supsamp;
+   for(j=1-(nsupsamppix*supsamp);j<(nsupsamppix*supsamp);j++){
+     for(i=1-(nsupsamppix*supsamp);i<(nsupsamppix*supsamp);i++){
+       xs[0] = j*scale;
+       xs[1] = i*scale;
+       assignRayOnImage(xs, pixelSize, imgCentreXPixels, imgCentreYPixels, img, im, maxNumRaysPerPixel, rays, &numActiveRaysInternal);
+     }
+   }
 
   /* Add the circle rays:
   */
   numActiveRays = numActiveRaysInternal;
   if(numCircleRays>0){
-    scale = 2.0*PI/(double)numCircleRays;
+    scale = 2.0*M_PI/(double)numCircleRays;
     for(i=0;i<numCircleRays;i++){
       angle = i*scale;
       xs[0] = par->radius*cos(angle);
@@ -1259,11 +1359,23 @@ How to calculate this distance? Well if we have N points randomly but evenly dis
   }
   oneOnNumActiveRaysMinus1 = 1.0/(double)(numActiveRaysInternal-1);
 
-  if(numActiveRays<par->pIntensity+numCircleRays)
+
+  if(numActiveRays<par->pIntensity+numCircleRays+pow((2*nsupsamppix*supsamp)-1,2))
     rays = realloc(rays, sizeof(rayData)*numActiveRays);
 
   if(par->traceRayAlgorithm==1){
     delaunay(DIM, gp, (unsigned long)par->ncell, 1, 0, &dc, &numCells); /* mallocs dc if getCells==T */
+    /*
+Required elements of gp:
+		.id
+		.x
+
+Sets elements of gp:
+		.sink
+		.numNeigh
+		.neigh
+    */
+
 //**** Actually we can figure out the cell geometry from the grid neighbours.
 
     /* We need to process the list of cells a bit further - calculate their centres, and reset the id values to be the same as the index of the cell in the list. (This last because we are going to construct other lists to indicate which cells have been visited etc.)
@@ -1280,8 +1392,8 @@ How to calculate this distance? Well if we have N points randomly but evenly dis
       dc[dci].id = dci;
     }
 
-    vertexCoords = extractGridXs(DIM, (unsigned long)par->ncell, gp);
-    cells = convertCellType(DIM, numCells, dc, gp);
+    vertexCoords = extractGridXs(DIM, (unsigned long)par->ncell, gp); /* Reads gp[*].x */
+    cells = convertCellType(DIM, numCells, dc, gp); /* Reads gp[*].x */
     free(dc);
 
     if(img[im].doline && img[im].doInterpolateVels){
@@ -1366,13 +1478,15 @@ While this is off however, gsl_* calls will not exit if they encounter a problem
       if(par->traceRayAlgorithm==0)
         traceray(rays[ri], im, par, gp, md, img\
           , cutoff, nStepsThruCell, oneOnNSteps);
+
       else if(par->traceRayAlgorithm==1)
         traceray_smooth(rays[ri], im, par, gp, vertexCoords, md, img\
           , cells, numCells, epsilon, gips, ptrToBuff\
           , numSegments, oneOnNumSegments);
 
       if (threadI == 0){ /* i.e., is master thread */
-        if(!silent) progressbar((double)(ri)*oneOnNumActiveRaysMinus1, 13);
+        progFraction = (double)(ri)*oneOnNumActiveRaysMinus1;
+        if(!silent) progressbar(progFraction, 13);
       }
     }
 
